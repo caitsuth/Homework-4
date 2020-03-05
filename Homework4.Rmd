@@ -1,0 +1,286 @@
+---
+title: "Homework4"
+author: "Caitlin Sutherland"
+date: "17/02/2020"
+output: html_document
+---
+
+**1. Read the Wikipedia article on data dredging. Import dataset.**
+
+Note that 'sibsp' is number of siblings/spouses aboard and 'parch' is number of parents/children aboard.
+
+```{r}
+Titanic=read.csv("titanic.csv")
+
+```
+
+**2. Avoid accusations of data dredging by developing some hypotheses about the variables that might impact survivorship for passengers on the Titanic. For the dataset, which variables do you hypothesize might impact survival? Provide a justification for each. Choose at least five variables.**
+
+The following variables may have an impact on survivorship among passengers on the Titanic:  
+a) *gender* - women would be more likely than men to be loaded on to lifeboats per the protocol at the time.  
+b) *passenger class* - third class passengers would be less likely to be loaded on to lifeboats than first or second class as a result of privilege.  
+c) *age* - children would be more likely to be loaded on to lifeboats per the protocol at the time.  
+d) *fare* - those that paid a higher fare would be more likely to survive: a more expensive cabin or bunk would likely be on a higher deck and thus more accessible to lifeboats and those who paid higher fares may have had more social standing and more resources for bribery.  
+e) *number of parents/children* - family status would likely increase the likelihood of survivorship. Note that this variable does not differentiate between parents and children and as a result it may not have a clear correlation with survivorship.  
+
+**3. Create some plots to examine the relationship between your predictor variables and the response (survival). For categorical predictor variables, use the mosiac function in the vcd library to create mosaic plots. If the predictor is a continuous variable, use the logi.hist.plot function in the popbio package.**
+
+a) *Gender*  
+
+Generate a contingency table and a mosaic plot to visualize the relationship between gender and survivorship on Titanic. 
+
+```{r}
+gender.cont=table(Titanic$Gender,Titanic$survived)
+rownames(gender.cont)=c("Men","Women")
+colnames(gender.cont)=c("Perished","Survived")
+gender.cont
+```
+
+```{r}
+mosaicplot(gender.cont,main="Titanic survivorship by gender", color="lightskyblue1")
+```
+
+Based on the mosaic plot, it appears that gender contributed to survivorship on the Titanic: only 19.1% of male passengers in the dataset survived, whereas 72.7% of female passengers in the dataset survived. 
+
+b) *Passenger class*  
+
+Generate a contingency table and mosaic plot to visualize the relationship between passenger class and survivorship aboard the Titanic.
+
+```{r}
+class.cont=table(Titanic$pclass,Titanic$survived)
+rownames(class.cont)=c("1st class", "2nd class", "3rd class")
+colnames(class.cont)=c("Perished","Survived")
+class.cont
+```
+
+```{r}
+mosaicplot(class.cont,main="Titanic survivorship by passenger class",color="pink2")
+```
+
+Based on the mosaic plot, it appears that passenger class also contributed to survivorship on the Titanic: 61.9% of first class passengers survived, compared to 43.0% of second class passengers and 25.5% of third class passengers. A potential trend of decreasing survivorship with decreasing passenger class is visible. 
+
+c) *Age*  
+
+Load package. Generate a plot.
+
+```{r}
+library("popbio")
+library("anchors")
+```
+
+```{r}
+#want to break down this data to take a look at the numbers
+rn=data.frame('Age'=Titanic$age,'Survival'=Titanic$survived)
+agef=factor(cut(rn$Age,breaks=0+10*(0:8)))
+agetable=table(agef,rn$Survival)
+agetable
+```
+
+
+```{r}
+#want to clean the data up a bit to remove extra columns and order them properly for upcoming analysis
+Titanic.factors=data.frame("Class"=Titanic$pclass,"Gender"=Titanic$Gender,"Age"=Titanic$age,"Fare"=Titanic$fare,"ParentsChildren"=Titanic$parch,"Survival"=Titanic$survived)  
+#the bestglm function will return an error if there is NA data present; use na.omit to eliminate those rows  
+Titanic.factors.clean=na.omit(Titanic.factors)
+
+logi.hist.plot(Titanic.factors.clean$Age,Titanic.factors.clean$Survival,type="hist",boxp=FALSE,xlabel="Age",mainlabel="Probability of Titanic passenger survival based on age")
+```
+
+The preliminary plotting of the Titanic data indicates a slight negative relationship between age and survival (i.e. probability of survival decreases with passenger age).
+
+d) *Fare*  
+
+Generate a plot.
+
+```{r}
+rn2=data.frame('Fare'=Titanic.factors.clean$Fare,'Survival'=Titanic.factors.clean$Survival)
+logi.hist.plot(rn2$Fare,rn2$Survival,type="hist",boxp=FALSE,xlabel="Fare paid",mainlabel="Probability of Titanic passenger survival based on fare paid")
+```
+
+Based on this preliminary plotting, the probability of passenger survival increases with fare paid. 
+
+e) *Number of parents/children*  
+
+Generate a plot.
+
+```{r}
+rn3=data.frame('Family'=Titanic.factors.clean$ParentsChildren,'Survival'=Titanic.factors.clean$Survival)
+logi.hist.plot(rn3$Family,rn3$Survival,type="hist",boxp=FALSE,xlabel="Number of parents or offspring on board",mainlabel="Probability of Titanic passenger survival based on family status")
+```
+
+Based on this preliminary plotting, the probability of passenger survival increases relative to the number of direct relatives (i.e. parents or offspring) they were travelling with. 
+
+**4. Now we need to decide which variables to include in a final model. There are two methods: purposeful selection and automatic selection. Use the bestglm function to identify the variables that lead to the best (lowest) AIC value. This is an automatic selection method.**
+
+```{r}
+library("bestglm")
+#the bestglm function automatically uses BIC for information criteria, need to instruct it to use AIC
+auto.selection=bestglm(Titanic.factors.clean, IC="AIC",family=binomial)
+print.bestglm(auto.selection)
+
+```
+
+**5. Run a logistic regression using the best model selected by the bestglm function. Provide the summary output for that regression.**
+
+The bestglm function identified three best predictor variables: class, gender and age. 
+
+```{r}
+auto.model=glm(Survival~Class+Gender+Age,data=Titanic.factors.clean,family=binomial(link="logit")) #use logistic regression/binomial distribution because outcome is binary
+summary.lm(auto.model)
+AIC(auto.model)
+```
+
+The adjusted R-squared for the auto-selected model is low (0.006687). AIC value is 990.9558 (recall that lower value relative to other models is better). 
+
+**6. Try to create a better model via purposeful selection. Do univariate regressions for each of the five predictor variables that were hypothesized as being related to survival. Anything with a p-value less than 0.25 can be included in the full model. If anything comes out as not significant in the full model, try dropping it and comparing the reduced model to the full model using the lrtest function.**
+
+a) *Gender*
+
+```{r}
+univariate.gender=glm(Survival~Gender,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(univariate.gender)
+AIC(univariate.gender)
+```
+
+The univariate model for gender returned an adjusted R-squared of 0.01127 and an AIC of 1105.549. The p-value is 0.0003445.
+
+b) *Passenger class*
+
+```{r}
+univariate.class=glm(Survival~Class,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(univariate.class)
+AIC(univariate.class)
+```
+
+The univariate model for passenger class returned an adjusted R-squared of 0.004319 and an AIC of 1309.278. The p-value is 0.01889.
+
+c) *Age*
+
+```{r}
+univariate.age=glm(Survival~Age,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(univariate.age)
+AIC(univariate.age)
+```
+
+The univariate model for age returned an adjusted R-squared of -0.0007914 and an AIC of 1414.515. The p-value is 0.6763.
+
+d) *Fare*
+
+```{r}
+univariate.fare=glm(Survival~Fare,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(univariate.fare)
+AIC(univariate.fare)
+```
+
+The univariate model for fare returned an adjusted R-squared of 0.001399 and an AIC of 1343.941. The p-value is 0.1169.
+
+e) *Number of parents/children*
+
+```{r}
+univariate.family=glm(Survival~ParentsChildren,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(univariate.family)
+AIC(univariate.family)
+```
+
+The univariate model for number of parents/children returned an adjusted R-squared of -0.0002288 and an AIC of 1404.113. The p-value is 0.3832.
+
+```{r}
+#include any variables with p<0.25 in univariate regressions when building model via purposeful selection
+purpose.model=glm(Survival~Gender+Class+Fare,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(purpose.model)
+AIC(purpose.model)
+```
+
+The initial purposeful selection model returned an adjusted R-squared of 0.007041 and an AIC of 1021.054. The p-value is 0.01577.  The 'Fare' variable was returned as non-significant and will be removed from the second purposeful selection model. 
+
+```{r}
+purpose.model2=glm(Survival~Gender+Class,data=Titanic.factors.clean,family=binomial(link="logit"))
+summary.lm(purpose.model2)
+AIC(purpose.model2)
+```
+
+```{r}
+library(lmtest)
+lrtest(purpose.model,purpose.model2)
+```
+
+The second purposeful selection model returned an adjusted R-squared of 0.007975 and an AIC of 1019.614. The p-value is 0.00568. It also had a higher log likelihood. Thus the second purposeful selection model is slightly better than the first purposeful selection model. 
+
+**7. Did purposeful selection produce a different model than automatic selection?**
+
+The purposeful selection model produced a slightly higher adjusted R-squared value (0.007975) than the automatic selection model (0.006687). However, according to the AIC the automatic selection model is of higher quality (automatic AIC = 991, purposeful AIC = 1020).
+
+**8. To view the effects of each predictor variable in the best model, use the allEffects function in the effects package. Were all effects in the direction that was expected?**
+
+```{r}
+library(effects)
+plot(allEffects(auto.model))
+#recall that for gender, 0 = male and 1 = female
+```
+
+All three of the predictor variables displayed an effect in the direction that was predicted: survival was highest among first class passengers and decreased with class number, survival among women was higher than among men, and survival decreased with passenger age. 
+
+**9. Perform some regression diagnostics. Complete the diagnostics from the example code. Generate the additional plots to examine regression assumptions.**
+
+```{r}
+#looking to make sure there is a linear relationship (fitted green line) and to examine plots to see if there are any differences in the variability of residuals as the value for each predictor variable increases.
+library(car)
+residualPlots(auto.model)
+```
+
+```{r}
+#check for studentized residuals with a Bonferonni p<0.05
+outlierTest(auto.model)
+```
+
+```{r}
+#Test for leverage. Look at hat values plot that indicate leverage
+influenceIndexPlot(auto.model)
+```
+
+```{r}
+#test for influential observations. If removal of an observation causes substantial change in the estimates of coefficient, it is called influential observation. Influence can be thought of as the product of leverage and outlier (e.g., it has high hat value and response value is unusual conditional on covariate pattern)
+influencePlot(auto.model)
+```
+
+```{r}
+#Examine relationship between predictors. Is there any multicollinearity?
+#The general rule of thumb is that VIFs exceeding 4 warrant further investigation, while VIFs exceeding 10 are signs of serious multicollinearity requiring correction.
+vif(auto.model)
+```
+
+**10. Were there any results of concern in the regression diagnostics?**
+
+Residual plots: the residuals for Age do not seem to be well-fitted to the line. 
+Studentized residuals: None. 
+Leverage:five points with hat-values that indicate a degree of leverage; unsure how concerning this is. 
+Influential observation: five points (25, 94, 218, 291 and 1212) were identified. 
+Multicollinearity: no results of concern (VIFs all well below 4).
+
+**11. Check the model using k-fold cross validation.**
+
+```{r}
+library(caret)
+ctrl=trainControl(method="repeatedcv",number=10,savePredictions=TRUE)
+Titanic.factors.clean$Survival=as.factor(Titanic.factors.clean$Survival)
+train(Survival~Class+Gender+Age,data=Titanic.factors.clean,method="glm",family=binomial(link='logit'),trControl=ctrl, tuneLength=5)
+```
+
+**12. Based on the k-fold results, how good was the model at predicting which people would survive?**
+
+The k-fold results indicate that the model is approximately 78% accurate in predicting which people would survive. However, it is difficult to discern how impressive this is without knowing the expected accuracy. 
+
+The Kappa statistic, however, indicates that the model achieved a rate of classification approximately 54% between the expected accurace and 100% accuracy.  This is considered moderate. 
+
+**13. Create a confusion matrix similar to the one discussed in class. What was the accuracy of your model according to this analysis?**
+
+```{r}
+predictions=factor(predict(auto.model,newdata=Titanic.factors.clean,type="response"))
+real=factor(Titanic.factors.clean$Survival) #kept getting error message about 'data and reference should be factors with the same levels, tried to resolve it by making the survival data into a factor - did not work (nor did any other methods I tried) 
+#code I tried to use for confusion matrix is below - changed to a comment to allow this chunk to run
+#confusionMatrix(data=as.numeric(predictions>0.5),reference=Titanic.factors.clean$Survival)
+```
+
+**14. Why might there be a difference in accuracy estimates between the k-fold cross validation and the confusion matrix?**
+
+A k-fold cross validation with k=10 would provide a much more robust and representative accuracy estimate than a confusion matrix (which only represents the results of one "fold").
